@@ -1,11 +1,22 @@
 # Open Micro-Manipulator — STM32F401 Edition
 
-This repository is the STM32F401RET6 controller adaptation of the Open
+## Why this exists
+
+I ran out of Raspberry Pi Pico 2 boards. The parts drawer, meanwhile, contained
+an embarrassing number of STM32F401 BlackPills. Rather than wait for a delivery,
+I chose the only sensible engineering response: make an adapter, rewire a
+BlackPill into the Pico socket, and teach it to impersonate the original motion
+controller.
+
+The result is an STM32F401RET6 controller adaptation of the Open
 Micro-Manipulator, an open-source motorized XYZ micromanipulator based on a
-three-axis parallel linkage. It replaces the original Raspberry Pi Pico
-controller with a hand-wired STM32F401 BlackPill-to-Pico-socket adapter while
-retaining magnetic encoders, TB6612 motor drivers, USB G-code control, and
-onboard calibration.
+three-axis parallel linkage. It provides equivalent motor-driver, magnetic
+encoder, USB G-code, guarded homing, and onboard-calibration functions for the
+existing control board—just with an STM32 doing the work.
+
+This is not a drop-in firmware binary for a Pico; it is a hardware-and-firmware
+conversion. The required wiring is documented in [the adapter wiring guide]
+(documentation/stm32_blackpill_adapter_wiring.md).
 
 The original Raspberry Pi Pico implementation remains at
 [0x23/MicroManipulatorStepper](https://github.com/0x23/MicroManipulatorStepper).
