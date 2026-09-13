@@ -87,7 +87,7 @@ const char* Logger::log_prefix(ELogLevel level) {
 
 void error_trap(const char* message) {
   while(true) {
-    sleep_ms(1000);
+    delay(1000);
     if(message != nullptr)
       LOG_ERROR(message);
   }

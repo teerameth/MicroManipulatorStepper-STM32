@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2500" height="1450" viewBox="0 0 2500 1450">
+  <defs>
+    <style>
+      .title{font-family:sans-serif;font-size:36px;font-weight:700;fill:#0f172a}
+      .sub{font-family:sans-serif;font-size:18px;fill:#475569}
+      .boardtitle{font-family:sans-serif;font-size:24px;font-weight:700;fill:#fff}
+      .pin{font-family:monospace;font-size:16px;font-weight:700;fill:#fff}
+      .route{font-family:sans-serif;font-size:14px;font-weight:700;fill:#0f172a}
+      .note{font-family:sans-serif;font-size:17px;fill:#334155}
+      .wire{fill:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;opacity:.82}
+      .component{font-family:sans-serif;font-size:11px;font-weight:700;fill:#0f172a;text-anchor:middle}
+      .component-label{font-family:sans-serif;font-size:14px;font-weight:700;fill:#0f172a}
+    </style>
+  </defs>
+  <rect width="2400" height="1550" fill="#f8fafc"/>
+  <text x="1200" y="45" text-anchor="middle" class="title">Black Pill to Pico Socket — Side-by-Side Soldering Layout</text>
+  <text x="1200" y="77" text-anchor="middle" class="sub">TOP / COMPONENT VIEW — both USB ends point upward — port names are authoritative</text>
+
+  <!-- board bodies -->
+  <rect x="70" y="125" width="550" height="1190" rx="30" fill="#111827" stroke="#020617" stroke-width="5"/>
+  <rect x="1780" y="125" width="550" height="1190" rx="30" fill="#064e3b" stroke="#022c22" stroke-width="5"/>
+  <rect x="245" y="105" width="200" height="75" rx="12" fill="#cbd5e1" stroke="#64748b" stroke-width="4"/>
+  <rect x="1955" y="105" width="200" height="75" rx="12" fill="#cbd5e1" stroke="#64748b" stroke-width="4"/>
+  <text x="345" y="150" text-anchor="middle" class="route">USB-C</text>
+  <text x="2055" y="150" text-anchor="middle" class="route">USB / BOARD TOP</text>
+  <text x="345" y="205" text-anchor="middle" class="boardtitle">STM32F411 BLACK PILL</text>
+  <text x="2055" y="205" text-anchor="middle" class="boardtitle">PICO SOCKET ON PCB</text>
+
+  <!-- faint header pads: 20 per side -->
+  <g fill="#94a3b8" stroke="#e2e8f0" stroke-width="2">
+    <!-- Black Pill left/right -->
+    <circle cx="90" cy="230" r="10"/><circle cx="600" cy="230" r="10"/><circle cx="90" cy="287" r="10"/><circle cx="600" cy="287" r="10"/>
+    <circle cx="90" cy="344" r="10"/><circle cx="600" cy="344" r="10"/><circle cx="90" cy="401" r="10"/><circle cx="600" cy="401" r="10"/>
+    <circle cx="90" cy="458" r="10"/><circle cx="600" cy="458" r="10"/><circle cx="90" cy="515" r="10"/><circle cx="600" cy="515" r="10"/>
+    <circle cx="90" cy="572" r="10"/><circle cx="600" cy="572" r="10"/><circle cx="90" cy="629" r="10"/><circle cx="600" cy="629" r="10"/>
+    <circle cx="90" cy="686" r="10"/><circle cx="600" cy="686" r="10"/><circle cx="90" cy="743" r="10"/><circle cx="600" cy="743" r="10"/>
+    <circle cx="90" cy="800" r="10"/><circle cx="600" cy="800" r="10"/><circle cx="90" cy="857" r="10"/><circle cx="600" cy="857" r="10"/>
+    <circle cx="90" cy="914" r="10"/><circle cx="600" cy="914" r="10"/><circle cx="90" cy="971" r="10"/><circle cx="600" cy="971" r="10"/>
+    <circle cx="90" cy="1028" r="10"/><circle cx="600" cy="1028" r="10"/><circle cx="90" cy="1085" r="10"/><circle cx="600" cy="1085" r="10"/>
+    <circle cx="90" cy="1142" r="10"/><circle cx="600" cy="1142" r="10"/><circle cx="90" cy="1199" r="10"/><circle cx="600" cy="1199" r="10"/>
+    <circle cx="90" cy="1256" r="10"/><circle cx="600" cy="1256" r="10"/><circle cx="90" cy="1313" r="10"/><circle cx="600" cy="1313" r="10"/>
+    <!-- Pico left/right -->
+    <circle cx="1800" cy="230" r="10"/><circle cx="2310" cy="230" r="10"/><circle cx="1800" cy="287" r="10"/><circle cx="2310" cy="287" r="10"/>
+    <circle cx="1800" cy="344" r="10"/><circle cx="2310" cy="344" r="10"/><circle cx="1800" cy="401" r="10"/><circle cx="2310" cy="401" r="10"/>
+    <circle cx="1800" cy="458" r="10"/><circle cx="2310" cy="458" r="10"/><circle cx="1800" cy="515" r="10"/><circle cx="2310" cy="515" r="10"/>
+    <circle cx="1800" cy="572" r="10"/><circle cx="2310" cy="572" r="10"/><circle cx="1800" cy="629" r="10"/><circle cx="2310" cy="629" r="10"/>
+    <circle cx="1800" cy="686" r="10"/><circle cx="2310" cy="686" r="10"/><circle cx="1800" cy="743" r="10"/><circle cx="2310" cy="743" r="10"/>
+    <circle cx="1800" cy="800" r="10"/><circle cx="2310" cy="800" r="10"/><circle cx="1800" cy="857" r="10"/><circle cx="2310" cy="857" r="10"/>
+    <circle cx="1800" cy="914" r="10"/><circle cx="2310" cy="914" r="10"/><circle cx="1800" cy="971" r="10"/><circle cx="2310" cy="971" r="10"/>
+    <circle cx="1800" cy="1028" r="10"/><circle cx="2310" cy="1028" r="10"/><circle cx="1800" cy="1085" r="10"/><circle cx="2310" cy="1085" r="10"/>
+    <circle cx="1800" cy="1142" r="10"/><circle cx="2310" cy="1142" r="10"/><circle cx="1800" cy="1199" r="10"/><circle cx="2310" cy="1199" r="10"/>
+    <circle cx="1800" cy="1256" r="10"/><circle cx="2310" cy="1256" r="10"/><circle cx="1800" cy="1313" r="10"/><circle cx="2310" cy="1313" r="10"/>
+  </g>
+
+  <!-- wires: Black Pill pin -> labeled center lane -> Pico pad -->
+  <g class="wire" stroke="#8b5cf6">
+    <path d="M90 344 C650 344 690 150 780 150 H1620 C1710 150 1700 230 1800 230"/>
+    <path d="M90 287 C650 287 690 195 780 195 H1620 C1710 195 1700 401 1800 401"/>
+    <path d="M90 401 C650 401 690 240 780 240 H1620 C1710 240 1700 458 1800 458"/>
+    <path d="M600 971 C700 971 690 285 780 285 H1620 C1710 285 2190 1028 2310 1028"/>
+    <path d="M600 914 C700 914 690 330 780 330 H1620 C1710 330 2190 971 2310 971"/>
+    <path d="M600 686 C700 686 690 375 780 375 H1620 C1710 375 2190 857 2310 857"/>
+  </g>
+  <g class="wire" stroke="#f97316">
+    <path d="M90 971 C650 971 690 440 780 440 H1620 C1710 440 1700 572 1800 572"/>
+    <path d="M90 1028 C650 1028 690 485 780 485 H1620 C1710 485 1700 515 1800 515"/>
+    <path d="M90 1085 C650 1085 690 530 780 530 H1620 C1710 530 1700 686 1800 686"/>
+    <path d="M90 1142 C650 1142 690 575 780 575 H1620 C1710 575 1700 743 1800 743"/>
+  </g>
+  <g class="wire" stroke="#14b8a6">
+    <path d="M90 857 C650 857 690 640 780 640 H1620 C1710 640 1700 857 1800 857"/>
+    <path d="M90 914 C650 914 690 685 780 685 H1620 C1710 685 1700 800 1800 800"/>
+    <path d="M600 572 C700 572 690 730 780 730 H1620 C1710 730 1700 971 1800 971"/>
+    <path d="M600 515 C700 515 690 775 780 775 H1620 C1710 775 1700 1028 1800 1028"/>
+  </g>
+  <g class="wire" stroke="#3b82f6">
+    <path d="M90 743 C650 743 690 840 780 840 H1620 C1710 840 1700 1142 1800 1142"/>
+    <path d="M90 800 C650 800 690 885 780 885 H1620 C1710 885 1700 1085 1800 1085"/>
+    <path d="M600 401 C700 401 690 930 780 930 H1620 C1710 930 1700 1256 1800 1256"/>
+    <path d="M600 857 C700 857 690 975 780 975 H1620 C1710 975 1700 1313 1800 1313"/>
+  </g>
+  <g class="wire" stroke="#eab308">
+    <path d="M90 458 C650 458 690 1040 780 1040 H1620 C1710 1040 2190 1313 2310 1313"/>
+    <path d="M90 572 C650 572 690 1085 780 1085 H1620 C1710 1085 2190 1256 2310 1256"/>
+  </g>
+  <g class="wire" stroke="#ef4444">
+    <path d="M90 515 C650 515 690 1150 780 1150 H1620 C1710 1150 2190 1142 2310 1142"/>
+    <path d="M2310 1085 C2370 1085 2370 458 2310 458"/>
+  </g>
+  <g class="wire" stroke="#22c55e">
+    <path d="M600 230 C740 230 690 1215 780 1215 H1620 C1740 1215 2190 287 2310 287"/>
+    <path d="M600 344 C740 344 690 1260 780 1260 H1620 C1740 1260 2190 458 2310 458"/>
+  </g>
+  <g class="wire" stroke="#111827">
+    <path d="M600 287 C740 287 690 1305 780 1305 H1620 C1740 1305 2190 344 2310 344"/>
+    <path d="M90 1256 C650 1256 690 1350 780 1350 H1620 C1710 1350 1700 344 1800 344"/>
+  </g>
+
+  <!-- Removable 5 V link in the BP40-to-P39 power wire -->
+  <rect x="1405" y="1196" width="105" height="38" rx="5" fill="#f8fafc"/>
+  <g stroke="#22c55e" stroke-width="4" fill="#fff">
+    <path d="M1405 1215 H1430 M1485 1215 H1510"/>
+    <circle cx="1435" cy="1215" r="6"/><circle cx="1480" cy="1215" r="6"/>
+    <path d="M1441 1210 L1472 1194"/>
+  </g>
+  <text x="1458" y="1184" text-anchor="middle" class="component-label">JP1 REMOVABLE</text>
+  <text x="1458" y="1248" text-anchor="middle" class="component-label" fill="#991b1b">OPEN FOR USB POWER</text>
+
+  <!-- route labels placed above the central horizontal segments -->
+  <g class="route" text-anchor="middle">
+    <text x="1200" y="143">MISO</text><text x="1200" y="188">SCK</text><text x="1200" y="233">MOSI</text>
+    <text x="1200" y="278">ENC1 CS</text><text x="1200" y="323">ENC2 CS</text><text x="1200" y="368">ENC3 CS</text>
+    <text x="1200" y="433">M3 AIN1</text><text x="1200" y="478">M3 AIN2</text><text x="1200" y="523">M3 BIN1</text><text x="1200" y="568">M3 BIN2</text>
+    <text x="1200" y="633">M2 AIN1</text><text x="1200" y="678">M2 AIN2</text><text x="1200" y="723">M2 BIN1</text><text x="1200" y="768">M2 BIN2</text>
+    <text x="1200" y="833">M1 AIN1</text><text x="1200" y="878">M1 AIN2</text><text x="1200" y="923">M1 BIN1</text><text x="1200" y="968">M1 BIN2</text>
+    <text x="1200" y="1033">TOOL1</text><text x="1200" y="1078">TOOL2</text><text x="1200" y="1143">STBY</text>
+    <text x="1200" y="1208">5 V</text><text x="1200" y="1253">3.3 V</text><text x="1200" y="1298">GND</text><text x="1200" y="1343">GND</text>
+  </g>
+
+  <!-- highlighted used pins and readable endpoint labels, drawn over wires -->
+  <g stroke="#fff" stroke-width="3">
+    <!-- BP left used -->
+    <g fill="#8b5cf6"><circle cx="90" cy="287" r="12"/><circle cx="90" cy="344" r="12"/><circle cx="90" cy="401" r="12"/></g>
+    <g fill="#eab308"><circle cx="90" cy="458" r="12"/><circle cx="90" cy="572" r="12"/></g>
+    <circle cx="90" cy="515" r="12" fill="#ef4444"/>
+    <g fill="#3b82f6"><circle cx="90" cy="743" r="12"/><circle cx="90" cy="800" r="12"/></g>
+    <g fill="#14b8a6"><circle cx="90" cy="857" r="12"/><circle cx="90" cy="914" r="12"/></g>
+    <g fill="#f97316"><circle cx="90" cy="971" r="12"/><circle cx="90" cy="1028" r="12"/><circle cx="90" cy="1085" r="12"/><circle cx="90" cy="1142" r="12"/></g>
+    <circle cx="90" cy="1256" r="12" fill="#111827"/>
+    <!-- BP right used -->
+    <circle cx="600" cy="230" r="12" fill="#22c55e"/><circle cx="600" cy="287" r="12" fill="#111827"/><circle cx="600" cy="344" r="12" fill="#22c55e"/>
+    <circle cx="600" cy="401" r="12" fill="#3b82f6"/><circle cx="600" cy="515" r="12" fill="#14b8a6"/><circle cx="600" cy="572" r="12" fill="#14b8a6"/>
+    <circle cx="600" cy="686" r="12" fill="#8b5cf6"/><circle cx="600" cy="857" r="12" fill="#3b82f6"/><circle cx="600" cy="914" r="12" fill="#8b5cf6"/><circle cx="600" cy="971" r="12" fill="#8b5cf6"/>
+    <!-- Pico endpoints -->
+    <g fill="#8b5cf6"><circle cx="1800" cy="230" r="12"/><circle cx="1800" cy="401" r="12"/><circle cx="1800" cy="458" r="12"/><circle cx="2310" cy="857" r="12"/><circle cx="2310" cy="971" r="12"/><circle cx="2310" cy="1028" r="12"/></g>
+    <g fill="#f97316"><circle cx="1800" cy="515" r="12"/><circle cx="1800" cy="572" r="12"/><circle cx="1800" cy="686" r="12"/><circle cx="1800" cy="743" r="12"/></g>
+    <g fill="#14b8a6"><circle cx="1800" cy="800" r="12"/><circle cx="1800" cy="857" r="12"/><circle cx="1800" cy="971" r="12"/><circle cx="1800" cy="1028" r="12"/></g>
+    <g fill="#3b82f6"><circle cx="1800" cy="1085" r="12"/><circle cx="1800" cy="1142" r="12"/><circle cx="1800" cy="1256" r="12"/><circle cx="1800" cy="1313" r="12"/></g>
+    <g fill="#eab308"><circle cx="2310" cy="1256" r="12"/><circle cx="2310" cy="1313" r="12"/></g>
+    <circle cx="2310" cy="1142" r="12" fill="#ef4444"/><circle cx="2310" cy="1085" r="12" fill="#ef4444"/>
+    <circle cx="2310" cy="287" r="12" fill="#22c55e"/><circle cx="2310" cy="458" r="12" fill="#22c55e"/>
+    <circle cx="2310" cy="344" r="12" fill="#111827"/><circle cx="1800" cy="344" r="12" fill="#111827"/>
+  </g>
+
+  <!-- endpoint text -->
+  <g class="pin">
+    <text x="115" y="292">BP2 PB13</text><text x="115" y="349">BP3 PB14</text><text x="115" y="406">BP4 PB15</text>
+    <text x="115" y="463">BP5 PA8</text><text x="115" y="520">BP6 PA9</text><text x="115" y="577">BP7 PA10</text>
+    <text x="115" y="748">BP10 PA15</text><text x="115" y="805">BP11 PB3</text><text x="115" y="862">BP12 PB4</text><text x="115" y="919">BP13 PB5</text>
+    <text x="115" y="976">BP14 PB6</text><text x="115" y="1033">BP15 PB7</text><text x="115" y="1090">BP16 PB8</text><text x="115" y="1147">BP17 PB9</text><text x="115" y="1261">BP19 GND</text>
+    <text x="575" y="235" text-anchor="end">BP40 5V</text><text x="575" y="292" text-anchor="end">BP39 GND</text><text x="575" y="349" text-anchor="end">BP38 3V3</text>
+    <text x="575" y="406" text-anchor="end">BP37 PB10</text><text x="575" y="520" text-anchor="end">BP35 PB1</text><text x="575" y="577" text-anchor="end">BP34 PB0</text>
+    <text x="575" y="691" text-anchor="end">BP32 PA6</text><text x="575" y="862" text-anchor="end">BP29 PA3</text><text x="575" y="919" text-anchor="end">BP28 PA2</text><text x="575" y="976" text-anchor="end">BP27 PA1</text>
+
+    <text x="1825" y="235">P1 GP0</text><text x="1825" y="349">P3 GND</text><text x="1825" y="406">P4 GP2</text><text x="1825" y="463">P5 GP3</text>
+    <text x="1825" y="520">P6 GP4</text><text x="1825" y="577">P7 GP5</text><text x="1825" y="691">P9 GP6</text><text x="1825" y="748">P10 GP7</text>
+    <text x="1825" y="805">P11 GP8</text><text x="1825" y="862">P12 GP9</text><text x="1825" y="976">P14 GP10</text><text x="1825" y="1033">P15 GP11</text>
+    <text x="1825" y="1090">P16 GP12</text><text x="1825" y="1147">P17 GP13</text><text x="1825" y="1261">P19 GP14</text><text x="1825" y="1318">P20 GP15</text>
+    <text x="2285" y="292" text-anchor="end">P39 VSYS</text><text x="2285" y="349" text-anchor="end">P38 GND</text><text x="2285" y="463" text-anchor="end">P36 3V3</text>
+    <text x="2285" y="862" text-anchor="end">P29 GP22</text><text x="2285" y="976" text-anchor="end">P27 GP21</text><text x="2285" y="1033" text-anchor="end">P26 GP20</text>
+    <text x="2285" y="1090" text-anchor="end">P25 PWM</text><text x="2285" y="1147" text-anchor="end">P24 STBY</text><text x="2285" y="1261" text-anchor="end">P22 TOOL2</text><text x="2285" y="1318" text-anchor="end">P21 TOOL1</text>
+  </g>
+
+  <!-- color legend only; every electrical component is drawn on its connection above -->
+  <g class="note">
+    <text x="90" y="1405">Wire colors: </text>
+    <text x="220" y="1405" fill="#8b5cf6">ENCODER</text><text x="340" y="1405" fill="#f97316">MOTOR 3</text><text x="455" y="1405" fill="#14b8a6">MOTOR 2</text><text x="570" y="1405" fill="#3b82f6">MOTOR 1</text>
+    <text x="685" y="1405" fill="#eab308">TOOLS</text><text x="770" y="1405" fill="#ef4444">CONTROL</text><text x="885" y="1405" fill="#22c55e">POWER</text><text x="980" y="1405" fill="#111827">GROUND</text>
+  </g>
+</svg>

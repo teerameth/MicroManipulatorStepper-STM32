@@ -372,7 +372,9 @@ class OpenMicroStageInterface:
                 raise ValueError('Axis index out of range')
             cmd += ' '+axis_chars[axis_idx]
 
-        res, msg = self.serial.send_command(cmd + "\n", 10)
+        # The STM32 safety-oriented implementation homes all three coupled axes
+        # together at 2 deg/s and can legitimately take longer than the Pico default.
+        res, msg = self.serial.send_command(cmd + "\n", 120)
         return res
 
     def calibrate_joint(self, joint_index: int, save_result: bool):

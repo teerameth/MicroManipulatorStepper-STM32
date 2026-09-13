@@ -1,4 +1,6 @@
 __pycache__/
 *.py[cod]
+encoder_log_*.csv
+documentation/calibration_scan/
 .DS_Store
 ._*

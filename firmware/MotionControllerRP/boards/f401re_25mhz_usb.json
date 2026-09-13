@@ -1,0 +1,46 @@
+{
+  "build": {
+    "arduino": {
+      "variant_h": "variant_generic.h"
+    },
+    "core": "stm32",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DSTM32F4 -DSTM32F401xE -DSTM32F4xx -DARDUINO_GENERIC_F401RETX -DHSE_VALUE=25000000U",
+    "f_cpu": "84000000L",
+    "hwids": [
+      [
+        "0x0483",
+        "0x5740"
+      ]
+    ],
+    "mcu": "stm32f401ret6",
+    "product_line": "STM32F401xE",
+    "variant": "STM32F4xx/F401R(B-C-D-E)T"
+  },
+  "debug": {
+    "jlink_device": "STM32F401RE",
+    "openocd_target": "stm32f4x",
+    "svd_path": "STM32F401xE.svd"
+  },
+  "frameworks": [
+    "arduino",
+    "cmsis",
+    "stm32cube",
+    "libopencm3"
+  ],
+  "name": "STM32F401RE controller (384 KiB app + calibration flash)",
+  "upload": {
+    "maximum_ram_size": 98304,
+    "maximum_size": 393216,
+    "protocol": "stlink",
+    "protocols": [
+      "blackmagic",
+      "dfu",
+      "jlink",
+      "serial",
+      "stlink"
+    ]
+  },
+  "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32f401re.html",
+  "vendor": "Local"
+}

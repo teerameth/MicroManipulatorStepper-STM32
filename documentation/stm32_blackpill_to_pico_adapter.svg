@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1450" viewBox="0 0 1800 1450">
+  <defs>
+    <style>
+      .title { font-family: sans-serif; font-size: 32px; font-weight: 700; fill: #0f172a; }
+      .subtitle { font-family: sans-serif; font-size: 18px; fill: #475569; }
+      .head { font-family: sans-serif; font-size: 20px; font-weight: 700; fill: white; }
+      .pin { font-family: monospace; font-size: 17px; font-weight: 700; fill: #0f172a; }
+      .net { font-family: sans-serif; font-size: 17px; font-weight: 600; fill: #0f172a; }
+      .small { font-family: sans-serif; font-size: 15px; fill: #334155; }
+      .note { font-family: sans-serif; font-size: 17px; fill: #7f1d1d; }
+      .wire { fill: none; stroke-width: 5; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1450" fill="#f8fafc"/>
+  <text x="900" y="48" text-anchor="middle" class="title">STM32F411 Black Pill → Raspberry Pi Pico Socket Adapter</text>
+  <text x="900" y="78" text-anchor="middle" class="subtitle">Top/component view • USB connectors toward the top • Wire by printed PA/PB name, not by position alone</text>
+
+  <!-- column headers -->
+  <rect x="80" y="105" width="420" height="48" rx="8" fill="#111827"/>
+  <rect x="525" y="105" width="750" height="48" rx="8" fill="#334155"/>
+  <rect x="1300" y="105" width="420" height="48" rx="8" fill="#111827"/>
+  <text x="290" y="137" text-anchor="middle" class="head">BLACK PILL HEADER</text>
+  <text x="900" y="137" text-anchor="middle" class="head">CONTROL-BOARD NET</text>
+  <text x="1510" y="137" text-anchor="middle" class="head">PICO SOCKET PAD</text>
+
+  <!-- helper backgrounds -->
+  <rect x="58" y="168" width="1684" height="230" rx="14" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="2"/>
+  <rect x="58" y="410" width="1684" height="150" rx="14" fill="#ffedd5" stroke="#f97316" stroke-width="2"/>
+  <rect x="58" y="572" width="1684" height="150" rx="14" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/>
+  <rect x="58" y="734" width="1684" height="150" rx="14" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <rect x="58" y="896" width="1684" height="110" rx="14" fill="#fef9c3" stroke="#eab308" stroke-width="2"/>
+  <rect x="58" y="1018" width="1684" height="110" rx="14" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+  <rect x="58" y="1140" width="1684" height="190" rx="14" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+
+  <!-- encoder rows -->
+  <g stroke="#8b5cf6" class="wire">
+    <path d="M500 191 H1300"/><path d="M500 228 H1300"/><path d="M500 265 H1300"/>
+    <path d="M500 302 H1300"/><path d="M500 339 H1300"/><path d="M500 376 H1300"/>
+  </g>
+  <g class="pin">
+    <text x="95" y="197">BP3  PB14</text><text x="95" y="234">BP2  PB13</text><text x="95" y="271">BP4  PB15</text>
+    <text x="95" y="308">BP27 PA1</text><text x="95" y="345">BP28 PA2</text><text x="95" y="382">BP32 PA6</text>
+    <text x="1705" y="197" text-anchor="end">PAD 1  GP0</text><text x="1705" y="234" text-anchor="end">PAD 4  GP2</text><text x="1705" y="271" text-anchor="end">PAD 5  GP3</text>
+    <text x="1705" y="308" text-anchor="end">PAD 26 GP20</text><text x="1705" y="345" text-anchor="end">PAD 27 GP21</text><text x="1705" y="382" text-anchor="end">PAD 29 GP22</text>
+  </g>
+  <g class="net" text-anchor="middle">
+    <text x="900" y="197">Encoder MISO • SPI2_MISO</text><text x="900" y="234">Encoder SCK • SPI2_SCK</text><text x="900" y="271">Encoder MOSI • SPI2_MOSI</text>
+    <text x="900" y="308">Encoder 1 CS • add 10 kΩ pull-up</text><text x="900" y="345">Encoder 2 CS • add 10 kΩ pull-up</text><text x="900" y="382">Encoder 3 CS • add 10 kΩ pull-up</text>
+  </g>
+
+  <!-- Motor 3 -->
+  <g stroke="#f97316" class="wire">
+    <path d="M500 433 H1300"/><path d="M500 470 H1300"/><path d="M500 507 H1300"/><path d="M500 544 H1300"/>
+  </g>
+  <g class="pin">
+    <text x="95" y="439">BP14 PB6</text><text x="95" y="476">BP15 PB7</text><text x="95" y="513">BP16 PB8</text><text x="95" y="550">BP17 PB9</text>
+    <text x="1705" y="439" text-anchor="end">PAD 7 GP5</text><text x="1705" y="476" text-anchor="end">PAD 6 GP4</text><text x="1705" y="513" text-anchor="end">PAD 9 GP6</text><text x="1705" y="550" text-anchor="end">PAD 10 GP7</text>
+  </g>
+  <g class="net" text-anchor="middle">
+    <text x="900" y="439">Motor 3 AIN1 • TIM4_CH1</text><text x="900" y="476">Motor 3 AIN2 • TIM4_CH2</text><text x="900" y="513">Motor 3 BIN1 • TIM4_CH3</text><text x="900" y="550">Motor 3 BIN2 • TIM4_CH4</text>
+  </g>
+
+  <!-- Motor 2 -->
+  <g stroke="#14b8a6" class="wire">
+    <path d="M500 595 H1300"/><path d="M500 632 H1300"/><path d="M500 669 H1300"/><path d="M500 706 H1300"/>
+  </g>
+  <g class="pin">
+    <text x="95" y="601">BP12 PB4</text><text x="95" y="638">BP13 PB5</text><text x="95" y="675">BP34 PB0</text><text x="95" y="712">BP35 PB1</text>
+    <text x="1705" y="601" text-anchor="end">PAD 12 GP9</text><text x="1705" y="638" text-anchor="end">PAD 11 GP8</text><text x="1705" y="675" text-anchor="end">PAD 14 GP10</text><text x="1705" y="712" text-anchor="end">PAD 15 GP11</text>
+  </g>
+  <g class="net" text-anchor="middle">
+    <text x="900" y="601">Motor 2 AIN1 • TIM3_CH1</text><text x="900" y="638">Motor 2 AIN2 • TIM3_CH2</text><text x="900" y="675">Motor 2 BIN1 • TIM3_CH3</text><text x="900" y="712">Motor 2 BIN2 • TIM3_CH4</text>
+  </g>
+
+  <!-- Motor 1 -->
+  <g stroke="#3b82f6" class="wire">
+    <path d="M500 757 H1300"/><path d="M500 794 H1300"/><path d="M500 831 H1300"/><path d="M500 868 H1300"/>
+  </g>
+  <g class="pin">
+    <text x="95" y="763">BP10 PA15</text><text x="95" y="800">BP11 PB3</text><text x="95" y="837">BP37 PB10</text><text x="95" y="874">BP29 PA3</text>
+    <text x="1705" y="763" text-anchor="end">PAD 17 GP13</text><text x="1705" y="800" text-anchor="end">PAD 16 GP12</text><text x="1705" y="837" text-anchor="end">PAD 19 GP14</text><text x="1705" y="874" text-anchor="end">PAD 20 GP15</text>
+  </g>
+  <g class="net" text-anchor="middle">
+    <text x="900" y="763">Motor 1 AIN1 • TIM2_CH1</text><text x="900" y="800">Motor 1 AIN2 • TIM2_CH2</text><text x="900" y="837">Motor 1 BIN1 • TIM2_CH3</text><text x="900" y="874">Motor 1 BIN2 • TIM2_CH4</text>
+  </g>
+
+  <!-- tools -->
+  <g stroke="#eab308" class="wire"><path d="M500 925 H1300"/><path d="M500 970 H1300"/></g>
+  <g class="pin">
+    <text x="95" y="931">BP5  PA8</text><text x="95" y="976">BP7  PA10</text>
+    <text x="1705" y="931" text-anchor="end">PAD 21 GP16</text><text x="1705" y="976" text-anchor="end">PAD 22 GP17</text>
+  </g>
+  <g class="net" text-anchor="middle"><text x="900" y="931">Tool 1 • TIM1_CH1</text><text x="900" y="976">Tool 2 • TIM1_CH3</text></g>
+
+  <!-- controls -->
+  <g stroke="#ef4444" class="wire"><path d="M500 1047 H1300"/><path d="M500 1092 H1300"/></g>
+  <g class="pin"><text x="95" y="1053">BP6  PA9</text><text x="95" y="1098">3V3 via 1 kΩ</text>
+    <text x="1705" y="1053" text-anchor="end">PAD 24 GP18</text><text x="1705" y="1098" text-anchor="end">PAD 25 GP19</text></g>
+  <g class="net" text-anchor="middle"><text x="900" y="1053">Motor STBY • add 10 kΩ pull-down</text><text x="900" y="1098">PWMA + PWMB • constant HIGH</text></g>
+
+  <!-- power -->
+  <g stroke="#22c55e" class="wire"><path d="M500 1171 H1300"/><path d="M500 1211 H1300"/></g>
+  <g stroke="#111827" class="wire"><path d="M500 1251 H1300"/><path d="M500 1291 H1300"/></g>
+  <g class="pin">
+    <text x="95" y="1177">BP40 5V</text><text x="95" y="1217">BP38 3V3</text><text x="95" y="1257">BP39 GND</text><text x="95" y="1297">BP19 GND</text>
+    <text x="1705" y="1177" text-anchor="end">PAD 39 VSYS</text><text x="1705" y="1217" text-anchor="end">PAD 36 3V3</text><text x="1705" y="1257" text-anchor="end">PAD 38 GND</text><text x="1705" y="1297" text-anchor="end">PAD 3 GND</text>
+  </g>
+  <g class="net" text-anchor="middle"><text x="900" y="1177">Board 5 V → Black Pill 5 V • use removable jumper</text><text x="900" y="1217">Black Pill regulated 3.3 V → PCB logic rail</text><text x="900" y="1257">Ground return 1</text><text x="900" y="1297">Ground return 2</text></g>
+
+  <!-- footer -->
+  <rect x="58" y="1350" width="1684" height="70" rx="10" fill="#fff" stroke="#94a3b8" stroke-width="2"/>
+  <text x="80" y="1378" class="note">IMPORTANT: remove the 5 V jumper whenever Black Pill USB power is connected, unless the carrier has verified VBUS isolation.</text>
+  <text x="80" y="1406" class="small">Leave Pico pads 2, 30–35, 37 and 40 unconnected. Add 100–220 Ω series resistors to the 12 motor signals and SPI/CS lines. Never apply 24 V to VM.</text>
+</svg>
