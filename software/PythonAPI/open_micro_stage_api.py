@@ -400,9 +400,10 @@ class OpenMicroStageInterface:
         :param x: Target X position (in workspace coordinates).
         :param y: Target Y position (in workspace coordinates).
         :param z: Target Z position (in workspace coordinates).
-        :param f: Feed rate in mm/s.
+        :param f: Peak feed in mm/s (0 < f <= 2 on STM32 v1.2; Y capped at 1).
         :param move_immediately: If True, execution starts without buffering delay.
-        :param blocking: If True, waits and retries if the device is busy. If False, returns immediately on 'BUSY'.
+        :param blocking: Retry BUSY on older firmware. STM32 v1.2 replaces an active
+            destination immediately; this does not wait for arrival.
         :param timeout: Timeout in seconds for each command attempt.
         :return: Status of the move command (e.g. OK, ERROR, BUSY, TIMEOUT).
         """

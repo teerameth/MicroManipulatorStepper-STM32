@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import queue
+import math
 import re
 import threading
 import time
@@ -24,6 +25,7 @@ except ImportError:
 
 BAUD_RATE = 921600
 DEFAULT_DEVICE_HINT = "F401RE_25MHZ_USB_CDC"
+DEFAULT_DEVICE_SERIAL = "20883074534E"
 
 
 @dataclass
@@ -66,6 +68,7 @@ class SerialWorker:
         time.sleep(0.2)
         self.device.reset_input_buffer()
         self.stop_event.clear()
+        self.emergency_event.clear()
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
         self.events.put(("connection", True, port))
@@ -104,6 +107,17 @@ class SerialWorker:
         # The worker checks this every serial timeout. During G28, one byte invokes
         # the firmware's immediate homing abort. At idle it executes M18 normally.
         self.emergency_event.set()
+
+    def cancel_queued(self) -> None:
+        while True:
+            try:
+                request = self.requests.get_nowait()
+            except queue.Empty:
+                break
+            if request is not None:
+                with self.state_lock:
+                    self.pending = max(0, self.pending - 1)
+                self.events.put(("result", request, "cancelled", []))
 
     def _set_active(self, command: str) -> None:
         with self.state_lock:
@@ -271,6 +285,12 @@ class ControllerGui(tk.Tk):
         self.events: queue.Queue = queue.Queue()
         self.worker = SerialWorker(self.events)
         self.pose: tuple[float, float, float] | None = None
+        self.target: tuple[float, float, float] | None = None
+        self.target_revision = 0
+        self.target_timer = None
+        self.target_inflight = False
+        self.motion_active = False
+        self.bookmark = None
         self.driver_active = False
         self.monitoring = True
         self.poll_in_progress = False
@@ -305,7 +325,7 @@ class ControllerGui(tk.Tk):
         safety_controls.pack(fill="x")
         ttk.Button(safety_controls, text="Home all (G28)", command=self.home_all).pack(side="left", padx=4)
         ttk.Button(safety_controls, text="Enable hold (M17)", command=lambda: self.send("M17")).pack(side="left", padx=4)
-        ttk.Button(safety_controls, text="Disable motors (M18)", command=lambda: self.send("M18")).pack(side="left", padx=4)
+        ttk.Button(safety_controls, text="Disable motors (M18)", command=self.emergency_disable).pack(side="left", padx=4)
         self.calibration_button = ttk.Button(
             safety_controls,
             text="Onboard calibrate (M56)",
@@ -354,21 +374,39 @@ class ControllerGui(tk.Tk):
         self.xyz_vars = [tk.StringVar(value="0.000") for _ in range(3)]
         for index, name in enumerate("XYZ"):
             ttk.Label(motion, text=name).grid(row=0, column=index * 2, padx=(4, 2))
-            ttk.Entry(motion, textvariable=self.xyz_vars[index], width=12).grid(row=0, column=index * 2 + 1, sticky="ew", padx=(0, 8))
+            entry = ttk.Entry(motion, textvariable=self.xyz_vars[index], width=12)
+            entry.grid(row=0, column=index * 2 + 1, sticky="ew", padx=(0, 8))
+            entry.bind("<Return>", lambda event: self.move_absolute())
         ttk.Label(motion, text="Feed mm/s").grid(row=0, column=6, padx=(4, 2))
-        self.feed_var = tk.StringVar(value="0.2")
-        ttk.Entry(motion, textvariable=self.feed_var, width=9).grid(row=0, column=7, padx=(0, 8))
-        ttk.Button(motion, text="Move absolute", command=self.move_absolute).grid(row=0, column=8, padx=4)
+        self.feed_var = tk.StringVar(value="1.0")
+        speed_box = ttk.Combobox(motion, textvariable=self.feed_var, values=("0.05", "0.2", "0.5", "1.0", "2.0"), width=9)
+        speed_box.grid(row=0, column=7, padx=(0, 8))
+        speed_box.bind("<<ComboboxSelected>>", self.change_speed)
+        speed_box.bind("<Return>", self.change_speed)
+        ttk.Button(motion, text="Set destination", command=self.move_absolute).grid(row=0, column=8, padx=4)
 
         ttk.Label(motion, text="Jog step mm").grid(row=1, column=0, pady=(8, 0))
         self.jog_var = tk.StringVar(value="0.1")
-        ttk.Entry(motion, textvariable=self.jog_var, width=9).grid(row=1, column=1, pady=(8, 0), sticky="w")
+        ttk.Combobox(motion, textvariable=self.jog_var, values=("0.001", "0.01", "0.1", "0.5", "1.0"), width=9).grid(row=1, column=1, pady=(8, 0), sticky="w")
         jog_buttons = ttk.Frame(motion)
         jog_buttons.grid(row=1, column=2, columnspan=7, sticky="w", pady=(8, 0))
         for axis, name in enumerate("XYZ"):
             ttk.Button(jog_buttons, text=f"{name}−", command=lambda a=axis: self.jog(a, -1)).pack(side="left", padx=2)
             ttk.Button(jog_buttons, text=f"{name}+", command=lambda a=axis: self.jog(a, 1)).pack(side="left", padx=2)
         ttk.Button(jog_buttons, text="Use current pose", command=self.copy_current_pose).pack(side="left", padx=(14, 2))
+        ttk.Button(motion, text="Stop & hold (Esc)", command=self.stop_hold).grid(row=2, column=8, pady=6)
+        self.destination_var = tk.StringVar(value="Destination: waiting for controller")
+        ttk.Label(motion, textvariable=self.destination_var).grid(row=2, column=0, columnspan=8, sticky="w")
+        ttk.Label(motion, text="Jogs update the destination during travel. Peak speed: up to 2 mm/s; Y limited to 1 mm/s.").grid(row=3, column=0, columnspan=9, sticky="w")
+        self.bind("<Escape>", lambda event: self.stop_hold())
+        shortcuts = ttk.Frame(motion)
+        shortcuts.grid(row=4, column=0, columnspan=9, sticky="ew", pady=(6, 0))
+        ttk.Button(shortcuts, text="Mark this position", command=self.mark_position).pack(side="left", padx=3)
+        ttk.Button(shortcuts, text="Return to mark", command=self.return_to_mark).pack(side="left", padx=3)
+        self.keyboard_jog = tk.BooleanVar(value=False)
+        ttk.Checkbutton(shortcuts, text="Keyboard jog: arrows = XY, PgUp/PgDn = Z", variable=self.keyboard_jog).pack(side="left", padx=12)
+        for key, axis, direction in (("Left",0,-1),("Right",0,1),("Down",1,-1),("Up",1,1),("Prior",2,1),("Next",2,-1)):
+            self.bind(f"<{key}>", lambda event, a=axis, d=direction: self.key_jog(event, a, d))
 
         tools = ttk.LabelFrame(self, text="Tools and raw command", padding=8)
         tools.grid(row=4, column=0, sticky="ew", padx=10, pady=5)
@@ -408,13 +446,20 @@ class ControllerGui(tk.Tk):
         ports = available_ports()
         self.port_box["values"] = ports
         if not self.port_var.get() or self.port_var.get() not in ports:
-            preferred = next((port for port in ports if DEFAULT_DEVICE_HINT in port), None)
+            preferred = next((p.device for p in list_ports.comports()
+                              if p.serial_number == DEFAULT_DEVICE_SERIAL), None)
+            preferred = preferred or next((port for port in ports if DEFAULT_DEVICE_HINT in port), None)
             if preferred or ports:
                 self.port_var.set(preferred or ports[0])
 
     def toggle_connection(self) -> None:
         if self.worker.connected:
+            self.cancel_target()
             self.worker.disconnect()
+            self.bookmark = None
+            self.target_inflight = False
+            self.pose = self.target = None
+            self.poll_in_progress = False
             self.connection_var.set("Disconnected")
             self.connect_button.configure(text="Connect")
             self.append_log("Disconnected; motor state on the controller was not changed.")
@@ -444,6 +489,11 @@ class ControllerGui(tk.Tk):
             "All three motors will move toward their mechanical home together, then retract to 42°.\n\nKeep the mechanism in view and use EMERGENCY DISABLE if motion is abnormal.",
         ):
             return
+        self.cancel_target()
+        self.worker.cancel_queued()
+        self.poll_in_progress = False
+        self.driver_active = False
+        self.bookmark = None
         self.send("G28", timeout=120.0)
 
     @property
@@ -481,6 +531,9 @@ class ControllerGui(tk.Tk):
             return
 
         preferred_port = self.port_var.get().strip()
+        self.cancel_target()
+        self.bookmark = None
+        self.target_inflight = False
         self.worker.disconnect()
         self.poll_in_progress = False
         self.connection_var.set("Onboard M56 running")
@@ -540,6 +593,7 @@ class ControllerGui(tk.Tk):
         ttk.Button(frame, text="Close", command=window.destroy).pack(anchor="e", pady=(10, 0))
 
     def emergency_disable(self) -> None:
+        self.cancel_target()
         if self.calibration_active:
             self.append_log("Emergency calibration abort requested…")
             assert self.calibration_worker is not None
@@ -548,6 +602,7 @@ class ControllerGui(tk.Tk):
         if not self.worker.connected:
             return
         self.append_log("Emergency disable requested…")
+        self.worker.cancel_queued()
         self.worker.emergency_disable()
 
     def move_absolute(self) -> None:
@@ -557,10 +612,10 @@ class ControllerGui(tk.Tk):
         except ValueError:
             messagebox.showerror("Invalid motion", "X, Y, Z, and feed must be numbers.")
             return
-        if feed <= 0:
-            messagebox.showerror("Invalid feed", "Feed must be greater than zero.")
+        if not all(math.isfinite(v) for v in (*xyz, feed)) or not 0 < feed <= 2:
+            messagebox.showerror("Invalid motion", "Use finite coordinates and speed greater than 0 and at most 2 mm/s.")
             return
-        self.send(f"G0 X{xyz[0]:.6f} Y{xyz[1]:.6f} Z{xyz[2]:.6f} F{feed:.4f}")
+        self.schedule_target(tuple(xyz))
 
     def jog(self, axis: int, direction: int) -> None:
         if self.pose is None:
@@ -572,11 +627,83 @@ class ControllerGui(tk.Tk):
         except ValueError:
             messagebox.showerror("Invalid jog", "Jog step and feed must be numbers.")
             return
-        target = list(self.pose)
+        if not math.isfinite(step) or step <= 0 or not math.isfinite(feed) or not 0 < feed <= 2:
+            messagebox.showerror("Invalid jog", "Use a positive finite step and speed up to 2 mm/s.")
+            return
+        target = list(self.target or self.pose)
         target[axis] += direction * step
-        self.send(
-            f"G0 X{target[0]:.6f} Y{target[1]:.6f} Z{target[2]:.6f} F{feed:.4f}"
-        )
+        self.schedule_target(tuple(target))
+
+    def cancel_target(self) -> None:
+        self.target_revision += 1
+        if self.target_timer is not None:
+            self.after_cancel(self.target_timer)
+            self.target_timer = None
+        self.target = None
+
+    def key_jog(self, event, axis, direction):
+        if self.keyboard_jog.get() and not isinstance(event.widget, (tk.Entry, ttk.Entry, ttk.Combobox, tk.Text)):
+            self.jog(axis, direction)
+            return "break"
+
+    def mark_position(self) -> None:
+        if self.pose is not None and self.driver_active:
+            self.bookmark = self.pose
+            self.append_log("Marked sample position: " + str(self.bookmark))
+
+    def change_speed(self, event=None) -> None:
+        if self.motion_active and self.target is not None:
+            self.schedule_target(self.target)
+
+    def return_to_mark(self) -> None:
+        if self.bookmark is not None:
+            self.schedule_target(self.bookmark)
+
+    def stop_hold(self) -> None:
+        self.cancel_target()
+        if self.calibration_active or self.worker.active_command.startswith("G28"):
+            self.emergency_disable()
+        elif self.worker.connected:
+            self.worker.cancel_queued()
+            self.poll_in_progress = False
+            self.send("M0")
+            self.destination_var.set("Travel cancelled; holding position")
+
+    def schedule_target(self, target: tuple[float, float, float]) -> None:
+        if self.calibration_active or not self.worker.connected or not self.driver_active:
+            messagebox.showerror("Stage not enabled", "Connect and enable the stage before moving.")
+            return
+        self.target = target
+        self.target_revision += 1
+        self.destination_var.set("Destination: " + "   ".join(f"{a} {v:+.4f}" for a, v in zip("XYZ", target)) + " mm")
+        if self.target_timer is not None:
+            self.after_cancel(self.target_timer)
+        self.target_timer = self.after(60, self.flush_target)
+
+    def flush_target(self) -> None:
+        self.target_timer = None
+        if self.target is None or not self.worker.connected:
+            return
+        if self.target_inflight:
+            self.target_timer = self.after(40, self.flush_target)
+            return
+        revision = self.target_revision
+        x, y, z = self.target
+        try:
+            feed = float(self.feed_var.get())
+            if not math.isfinite(feed) or not 0 < feed <= 2:
+                raise ValueError()
+        except ValueError:
+            self.cancel_target()
+            self.destination_var.set("Invalid speed; target not sent")
+            return
+        self.target_inflight = True
+        def finished(status, lines):
+            self.target_inflight = False
+            if status != "ok" and revision == self.target_revision:
+                self.cancel_target()
+                self.destination_var.set("Target rejected: " + ("; ".join(lines) or status))
+        self.send(f"G0 X{x:.6f} Y{y:.6f} Z{z:.6f} F{feed:.4f}", callback=finished)
 
     def copy_current_pose(self) -> None:
         if self.pose is None:
@@ -649,13 +776,15 @@ class ControllerGui(tk.Tk):
         if not self.calibration_active and self.worker.idle and not self.poll_in_progress:
             self.poll_in_progress = True
             self.send("M57", quiet=True, callback=self._state_received)
-        self.after(800, self.poll_state)
+        self.after(200, self.poll_state)
 
     def _state_received(self, status: str, lines: list[str]) -> None:
         if status == "ok":
             state = parse_controller_state(lines)
             self.driver_active = state.get("drivers", False)
             fault = state.get("fault", False)
+            if fault or not self.driver_active:
+                self.cancel_target()
             for axis, item in state.get("joints", {}).items():
                 self.joint_table.item(
                     str(axis),
@@ -683,6 +812,11 @@ class ControllerGui(tk.Tk):
             pose = parse_pose(lines)
             if pose:
                 self.pose = pose
+                if self.target_timer is None and not self.target_inflight:
+                    destination = next((line for line in lines if line.startswith("Destination:")), None)
+                    if destination:
+                        self.target = parse_pose([destination])
+                        self.destination_var.set(destination + " mm")
                 self.pose_var.set(
                     f"Pose: X {pose[0]:+.6f}   Y {pose[1]:+.6f}   Z {pose[2]:+.6f} mm"
                 )
@@ -695,6 +829,7 @@ class ControllerGui(tk.Tk):
 
     def _motion_received(self, status: str, lines: list[str]) -> None:
         moving = status == "ok" and bool(lines) and lines[0].strip() == "0"
+        self.motion_active = moving
         text = self.summary_var.get().replace("Motion: checking…", f"Motion: {'MOVING' if moving else 'idle'}")
         if "Motion:" in text and "checking…" not in text:
             text = re.sub(r"Motion: (?:MOVING|idle)", f"Motion: {'MOVING' if moving else 'idle'}", text)

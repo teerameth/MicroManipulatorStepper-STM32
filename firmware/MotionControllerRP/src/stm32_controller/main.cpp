@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "calibration_data.h"
+#include "cascaded_servo.h"
 #include "kinematic_models/kinematic_model_delta3d.h"
 #include "persistent_calibration.h"
 
@@ -30,6 +31,7 @@ constexpr float POLE_PAIRS = 50.0f;
 constexpr uint32_t SPI_HZ = 4000000;
 constexpr uint32_t PWM_HZ = 20000;
 constexpr uint32_t PWM_MAX = 4095;
+constexpr char FIRMWARE_VERSION[] = "v1.3.2-stm32-f401";
 // Axes 0/1 plateaued early during the original 0.18-amplitude calibration.
 // Use the already-qualified normal drive amplitude during the bounded homing
 // sequence so ordinary linkage friction is less likely to look like an end stop.
@@ -52,27 +54,23 @@ constexpr float HOME_REFERENCE_BACKOFF_FIELD_RAD = PI_F * 0.5f;
 constexpr float HOME_RETRACT_DEG = 42.0f;
 constexpr float MIN_COMMAND_DEG = 0.75f;
 constexpr float MAX_PHASE_LEAD = PI_F / 3.0f;
-constexpr float POSITION_KP = 80.0f;
-constexpr float POSITION_KI = 35.0f;
-constexpr float VELOCITY_DAMPING = 0.04f;
-// A loaded joint needs integral torque to hold against gravity.  That stored
-// torque must not mask a genuine correction in the opposite direction after
-// the joint crosses its target.  Ignore encoder-scale chatter around zero, but
-// reset an opposing integral once the error exceeds this threshold.
-constexpr float INTEGRAL_REVERSAL_ERROR = 0.10f * DEG_TO_RAD_F;
+// Guarded home-search gains; normal motion uses cascaded_servo.h.
+constexpr float POSITION_KP = 60.0f;
+constexpr float VELOCITY_DAMPING = 0.20f;
 constexpr uint32_t SERVO_PERIOD_US = 1000;
 constexpr uint8_t STATUS_OVERSPEED = 0x01;
 constexpr uint8_t STATUS_WEAK_FIELD = 0x02;
 constexpr uint8_t STATUS_UNDERVOLT = 0x04;
+constexpr uint8_t STATUS_CRC_ERROR = 0x08;
 
-constexpr pin_size_t PIN_STBY = PA9;
-constexpr pin_size_t PIN_SCK = PB13;
-constexpr pin_size_t PIN_MISO = PB14;
-constexpr pin_size_t PIN_MOSI = PB15;
-constexpr pin_size_t PIN_CS[AXIS_COUNT] = {PA1, PA2, PA6};
-constexpr pin_size_t PIN_TOOL[2] = {PA8, PA10};
+constexpr uint32_t PIN_STBY = PA9;
+constexpr uint32_t PIN_SCK = PB13;
+constexpr uint32_t PIN_MISO = PB14;
+constexpr uint32_t PIN_MOSI = PB15;
+constexpr uint32_t PIN_CS[AXIS_COUNT] = {PA1, PA2, PA6};
+constexpr uint32_t PIN_TOOL[2] = {PA8, PA10};
 
-constexpr pin_size_t MOTOR_GPIO[AXIS_COUNT][4] = {
+constexpr uint32_t MOTOR_GPIO[AXIS_COUNT][4] = {
     {PA15, PB3, PB10, PA3},
     {PB4, PB5, PB0, PB1},
     {PB6, PB7, PB8, PB9},
@@ -99,7 +97,7 @@ void serialf(const char *format, ...) {
 
 class Encoder {
  public:
-  explicit Encoder(pin_size_t chip_select) : cs_(chip_select) {}
+  explicit Encoder(uint32_t chip_select) : cs_(chip_select) {}
 
   void begin_gpio() {
     pinMode(cs_, OUTPUT);
@@ -107,26 +105,42 @@ class Encoder {
   }
 
   int32_t read_raw() {
-    uint8_t data[6] = {0xA0, 0x03, 0, 0, 0, 0};
-    encoder_spi.beginTransaction(SPISettings(SPI_HZ, MSBFIRST, SPI_MODE3));
-    digitalWrite(cs_, LOW);
-    encoder_spi.transfer(data, sizeof(data));
-    digitalWrite(cs_, HIGH);
-    encoder_spi.endTransaction();
+    constexpr int MAX_ATTEMPTS = 3;
+    uint8_t last_sensor_status = 0;
+    for (int attempt = 0; attempt < MAX_ATTEMPTS; ++attempt) {
+      uint8_t data[6] = {0xA0, 0x03, 0, 0, 0, 0};
+      encoder_spi.beginTransaction(SPISettings(SPI_HZ, MSBFIRST, SPI_MODE3));
+      digitalWrite(cs_, LOW);
+      encoder_spi.transfer(data, sizeof(data));
+      digitalWrite(cs_, HIGH);
+      encoder_spi.endTransaction();
 
-    status_ = data[4] & 0x07;
-    const int32_t raw = (int32_t(data[2]) << 13) |
-                        (int32_t(data[3]) << 5) | (data[4] >> 3);
-    if (!initialized_) {
+      last_sensor_status = data[4] & 0x07;
+      const int32_t raw = (int32_t(data[2]) << 13) |
+                          (int32_t(data[3]) << 5) | (data[4] >> 3);
+      if (data[5] != calculate_crc(uint32_t(raw), last_sensor_status)) {
+        ++crc_retries_;
+        continue;
+      }
+
+      status_ = last_sensor_status;
+      if (!initialized_) {
+        last_raw_ = raw;
+        initialized_ = true;
+        return absolute_raw_;
+      }
+      int32_t delta = raw - last_raw_;
+      if (delta > ENCODER_CPR / 2) delta -= ENCODER_CPR;
+      if (delta < -ENCODER_CPR / 2) delta += ENCODER_CPR;
+      absolute_raw_ += delta;
       last_raw_ = raw;
-      initialized_ = true;
       return absolute_raw_;
     }
-    int32_t delta = raw - last_raw_;
-    if (delta > ENCODER_CPR / 2) delta -= ENCODER_CPR;
-    if (delta < -ENCODER_CPR / 2) delta += ENCODER_CPR;
-    absolute_raw_ += delta;
-    last_raw_ = raw;
+
+    // Never pass a corrupt angle into position feedback or commutation. The
+    // caller disables the drivers if all immediate retries fail.
+    ++crc_failures_;
+    status_ = last_sensor_status | STATUS_CRC_ERROR;
     return absolute_raw_;
   }
 
@@ -140,12 +154,30 @@ class Encoder {
   }
 
   uint8_t status() const { return status_; }
+  uint32_t crc_retries() const { return crc_retries_; }
+  uint32_t crc_failures() const { return crc_failures_; }
 
  private:
-  pin_size_t cs_;
+  static uint8_t calculate_crc(uint32_t angle, uint8_t status) {
+    uint8_t crc = 0;
+    const uint8_t bytes[3] = {
+        uint8_t(angle >> 13), uint8_t(angle >> 5),
+        uint8_t((angle << 3) | (status & 0x07))};
+    for (uint8_t value : bytes) {
+      crc ^= value;
+      for (int bit = 0; bit < 8; ++bit)
+        crc = (crc & 0x80) ? uint8_t((crc << 1) ^ 0x07)
+                           : uint8_t(crc << 1);
+    }
+    return crc;
+  }
+
+  uint32_t cs_;
   int32_t last_raw_ = 0;
   int32_t absolute_raw_ = 0;
   uint8_t status_ = 0x07;
+  uint32_t crc_retries_ = 0;
+  uint32_t crc_failures_ = 0;
   bool initialized_ = false;
 };
 
@@ -164,8 +196,27 @@ struct AxisState {
   float target = 0.0f;
   float integral_error = 0.0f;
   float phase_lead = 0.0f;
+  CascadedServo::Controller servo;
+  float last_sample_jump = 0.0f;
+  float peak_sample_jump = 0.0f;
+  float peak_abs_error = 0.0f;
+  float peak_abs_velocity = 0.0f;
+  float peak_abs_phase = 0.0f;
+  uint32_t saturated_ticks = 0;
+  uint32_t diagnostic_ticks = 0;
   bool homed = false;
 };
+
+// The calibration sweep records encoder raw count as a function of commanded
+// mechanical motor position.  Normal feedback must therefore use the calibrated
+// position for both the position error and the base commutation angle.  Using the
+// linear raw-count estimate here creates a position-dependent electrical phase
+// error that is multiplied by POLE_PAIRS and can reverse motor torque.
+float closed_loop_field(const AxisState &state, float calibrated_position,
+                        float phase_lead = 0.0f) {
+  return state.home_field + state.direction *
+      (calibrated_position * POLE_PAIRS + phase_lead);
+}
 
 AxisState axis_state[AXIS_COUNT];
 PersistentCalibration::Data calibration{};
@@ -228,12 +279,23 @@ void set_signed_phase(int axis, int positive_channel, int negative_channel,
 }
 
 void set_field(int axis, float field_rad, float amplitude) {
-  // Normal control remains fixed at 0.22. Only the bounded onboard calibration
-  // path is allowed to request the original firmware's 0.60 amplitude.
+  // Clamp every caller to the electrically qualified calibration amplitude.
   amplitude = constrain(amplitude, 0.0f, CALIBRATION_AMPLITUDE);
   const int32_t peak = int32_t(amplitude * float(PWM_MAX) + 0.5f);
   set_signed_phase(axis, 0, 1, int32_t(sinf(field_rad) * peak));
   set_signed_phase(axis, 2, 3, int32_t(cosf(field_rad) * peak));
+}
+
+void reset_motion_diagnostics() {
+  for (auto &state : axis_state) {
+    state.last_sample_jump = 0.0f;
+    state.peak_sample_jump = 0.0f;
+    state.peak_abs_error = 0.0f;
+    state.peak_abs_velocity = 0.0f;
+    state.peak_abs_phase = 0.0f;
+    state.saturated_ticks = 0;
+    state.diagnostic_ticks = 0;
+  }
 }
 
 void start_one_axis(int axis, float field_rad, float amplitude) {
@@ -882,9 +944,7 @@ bool enable_closed_loop() {
     state.target = position;
     state.velocity = 0.0f;
     state.integral_error = 0.0f;
-    set_field(axis,
-              state.home_field + state.direction * state.geometric_position * POLE_PAIRS,
-              0.0f);
+    set_field(axis, closed_loop_field(state, position), 0.0f);
   }
   digitalWrite(PIN_STBY, HIGH);
   drivers_enabled = true;
@@ -896,9 +956,7 @@ bool enable_closed_loop() {
       if (!sample_axis(axis, position)) return false;
       state.position = position;
       state.previous_position = position;
-      set_field(axis,
-                state.home_field +
-                    state.direction * state.geometric_position * POLE_PAIRS,
+      set_field(axis, closed_loop_field(state, position),
                 DRIVE_AMPLITUDE[axis] * ramp_fraction);
     }
     delay(5);
@@ -914,9 +972,7 @@ bool enable_closed_loop() {
       if (!sample_axis(axis, position)) return false;
       state.position = position;
       state.previous_position = position;
-      set_field(axis,
-                state.home_field +
-                    state.direction * state.geometric_position * POLE_PAIRS,
+      set_field(axis, closed_loop_field(state, position),
                 DRIVE_AMPLITUDE[axis]);
     }
     delay(5);
@@ -931,6 +987,7 @@ bool enable_closed_loop() {
     state.velocity = 0.0f;
     state.integral_error = 0.0f;
     state.phase_lead = 0.0f;
+    state.servo.reset();
   }
   last_servo_us = micros();
   return true;
@@ -949,6 +1006,7 @@ void update_cartesian_target() {
     return;
   }
   for (int axis = 0; axis < AXIS_COUNT; ++axis) axis_state[axis].target = targets[axis];
+  current_pose = pose;
   if (fraction >= 1.0f) {
     current_pose = move.end;
     move.active = false;
@@ -966,48 +1024,37 @@ void servo_tick(float dt) {
     AxisState &state = axis_state[axis];
     float position;
     if (!sample_axis(axis, position)) return;
-    const float jump_deg = fabsf((position - state.previous_position) * RAD_TO_DEG_F);
+    const float signed_jump =
+        (position - state.previous_position) * RAD_TO_DEG_F;
+    const float jump_deg = fabsf(signed_jump);
+    state.last_sample_jump = signed_jump;
+    state.peak_sample_jump = max(state.peak_sample_jump, jump_deg);
     if (jump_deg > 0.75f) {
-      char message[96];
-      snprintf(message, sizeof(message), "axis %d encoder jump %.3f deg", axis, jump_deg);
+      // Preserve the faulting sample for M57 instead of leaving telemetry at
+      // the preceding sample, which obscured the direction of a real slip.
+      state.position = position;
+      char message[128];
+      snprintf(message, sizeof(message),
+               "axis %d encoder jump %+.3f deg (target %.3f, position %.3f)",
+               axis, signed_jump, state.target * RAD_TO_DEG_F,
+               position * RAD_TO_DEG_F);
       latch_fault(message);
       return;
     }
     const float raw_velocity = (position - state.previous_position) / dt;
     state.previous_position = position;
     state.position = position;
-    state.velocity += 0.08f * (raw_velocity - state.velocity);
+    state.velocity += dt / (0.004f + dt) * (raw_velocity - state.velocity);
 
     const float error = state.target - position;
-    const float integral_limit = MAX_PHASE_LEAD / POSITION_KI;
-    if (fabsf(error) >= INTEGRAL_REVERSAL_ERROR &&
-        state.integral_error * error < 0.0f) {
-      // The joint has crossed the target.  Remove holding torque accumulated
-      // for the previous side so restoring torque reverses immediately.
-      state.integral_error = 0.0f;
-    }
-
-    const float integral_candidate = constrain(
-        state.integral_error + error * dt, -integral_limit, integral_limit);
-    const float candidate_phase =
-        POSITION_KP * error + POSITION_KI * integral_candidate -
-        VELOCITY_DAMPING * state.velocity;
-    // Conditional integration prevents the I term from winding farther into
-    // the phase clamp while still allowing it to unwind out of saturation.
-    const bool winds_positive_saturation =
-        candidate_phase > MAX_PHASE_LEAD && error > 0.0f;
-    const bool winds_negative_saturation =
-        candidate_phase < -MAX_PHASE_LEAD && error < 0.0f;
-    if (!winds_positive_saturation && !winds_negative_saturation)
-      state.integral_error = integral_candidate;
-
-    state.phase_lead = constrain(
-        POSITION_KP * error + POSITION_KI * state.integral_error -
-            VELOCITY_DAMPING * state.velocity,
-        -MAX_PHASE_LEAD, MAX_PHASE_LEAD);
-    const float field =
-        state.home_field + state.direction * state.geometric_position * POLE_PAIRS +
-        state.direction * state.phase_lead;
+    state.peak_abs_error = max(state.peak_abs_error, fabsf(error));
+    state.peak_abs_velocity = max(state.peak_abs_velocity, fabsf(state.velocity));
+    state.phase_lead = state.servo.update(error, state.velocity, dt);
+    state.peak_abs_phase = max(state.peak_abs_phase, fabsf(state.phase_lead));
+    if (fabsf(state.phase_lead) >= 0.99f * CascadedServo::PHASE_LIMIT)
+      ++state.saturated_ticks;
+    ++state.diagnostic_ticks;
+    const float field = closed_loop_field(state, position, state.phase_lead);
     set_field(axis, field, DRIVE_AMPLITUDE[axis]);
   }
 }
@@ -1062,6 +1109,8 @@ bool retract_all_from_home_open_loop(float target_deg, float speed_deg_s) {
 
   disable_drivers();
   float previous_position[AXIS_COUNT] = {};
+  float start_position_deg[AXIS_COUNT] = {};
+  float start_field[AXIS_COUNT] = {};
   int lag_samples[AXIS_COUNT] = {};
   for (int axis = 0; axis < AXIS_COUNT; ++axis) {
     AxisState &state = axis_state[axis];
@@ -1070,7 +1119,9 @@ bool retract_all_from_home_open_loop(float target_deg, float speed_deg_s) {
     state.position = position;
     state.previous_position = position;
     previous_position[axis] = position;
-    set_field(axis, state.home_field, 0.0f);
+    start_position_deg[axis] = position * RAD_TO_DEG_F;
+    start_field[axis] = closed_loop_field(state, position);
+    set_field(axis, start_field[axis], 0.0f);
   }
 
   digitalWrite(PIN_STBY, HIGH);
@@ -1083,14 +1134,34 @@ bool retract_all_from_home_open_loop(float target_deg, float speed_deg_s) {
       state.position = position;
       state.previous_position = position;
       previous_position[axis] = position;
-      set_field(axis, state.home_field,
+      set_field(axis, start_field[axis],
                 DRIVE_AMPLITUDE[axis] * float(step) / 30.0f);
     }
     delay(5);
   }
 
-  const uint32_t duration_ms =
-      max(uint32_t(1), uint32_t(target_deg / speed_deg_s * 1000.0f));
+  // The parallel mechanism can relax by several mechanical degrees while all
+  // drivers are disabled between finding the stops and starting this retract.
+  // Begin from each measured calibrated position instead of assuming every axis
+  // is still exactly at zero. This avoids both a multi-step snap and a false
+  // tracking fault at the start of an otherwise valid retract.
+  float maximum_travel_deg = 0.0f;
+  for (int axis = 0; axis < AXIS_COUNT; ++axis) {
+    AxisState &state = axis_state[axis];
+    float position;
+    if (!sample_axis(axis, position)) return false;
+    state.position = position;
+    state.previous_position = position;
+    previous_position[axis] = position;
+    start_position_deg[axis] = position * RAD_TO_DEG_F;
+    start_field[axis] = closed_loop_field(state, position);
+    set_field(axis, start_field[axis], DRIVE_AMPLITUDE[axis]);
+    maximum_travel_deg = max(maximum_travel_deg,
+                             fabsf(target_deg - start_position_deg[axis]));
+  }
+
+  const uint32_t duration_ms = max(
+      uint32_t(1), uint32_t(maximum_travel_deg / speed_deg_s * 1000.0f));
   const uint32_t started = millis();
   int last_report = -1;
   while (true) {
@@ -1099,12 +1170,14 @@ bool retract_all_from_home_open_loop(float target_deg, float speed_deg_s) {
     const float fraction = constrain(float(elapsed_ms) / float(duration_ms),
                                      0.0f, 1.0f);
     const float smooth = fraction * fraction * (3.0f - 2.0f * fraction);
-    const float command_deg = target_deg * smooth;
+    float command_deg[AXIS_COUNT];
 
     for (int axis = 0; axis < AXIS_COUNT; ++axis) {
       AxisState &state = axis_state[axis];
+      command_deg[axis] = start_position_deg[axis] +
+          (target_deg - start_position_deg[axis]) * smooth;
       const float commanded_field = state.home_field + state.direction *
-          command_deg * DEG_TO_RAD_F * POLE_PAIRS;
+          command_deg[axis] * DEG_TO_RAD_F * POLE_PAIRS;
       set_field(axis, commanded_field, DRIVE_AMPLITUDE[axis]);
       float position;
       if (!sample_axis(axis, position)) return false;
@@ -1122,7 +1195,7 @@ bool retract_all_from_home_open_loop(float target_deg, float speed_deg_s) {
         return false;
       }
       const float lag_deg =
-          fabsf(command_deg - position * RAD_TO_DEG_F);
+          fabsf(command_deg[axis] - position * RAD_TO_DEG_F);
       lag_samples[axis] = lag_deg > MAX_TRACKING_LAG_DEG
                               ? lag_samples[axis] + 1
                               : 0;
@@ -1136,11 +1209,13 @@ bool retract_all_from_home_open_loop(float target_deg, float speed_deg_s) {
       }
     }
 
-    const int report = int(command_deg / 5.0f);
+    const int report = int(fraction * 10.0f);
     if (report != last_report) {
       last_report = report;
-      serialf("I)Home retract command %.1f deg; encoder %.2f %.2f %.2f deg\n",
-              command_deg, axis_state[0].position * RAD_TO_DEG_F,
+      serialf("I)Home retract %.0f%%; command %.2f %.2f %.2f deg; "
+              "encoder %.2f %.2f %.2f deg\n",
+              fraction * 100.0f, command_deg[0], command_deg[1], command_deg[2],
+              axis_state[0].position * RAD_TO_DEG_F,
               axis_state[1].position * RAD_TO_DEG_F,
               axis_state[2].position * RAD_TO_DEG_F);
     }
@@ -1148,20 +1223,73 @@ bool retract_all_from_home_open_loop(float target_deg, float speed_deg_s) {
     delayMicroseconds(500);
   }
 
-  // Capture the field that successfully carried each joint to the neutral pose
-  // as its load-aware commutation reference. This preserves motor output while
-  // resetting the feedback phase to zero and restores equal correction margin.
+  // Estimate the local commutation reference from BOTH directions. The loaded
+  // end of a one-way retract contains static friction and is not a neutral
+  // rotor/field alignment. Circular averaging removes electrical wrap effects.
+  float applied_field[AXIS_COUNT];
+  for (int axis = 0; axis < AXIS_COUNT; ++axis)
+    applied_field[axis] = axis_state[axis].home_field +
+        axis_state[axis].direction * target_deg * DEG_TO_RAD_F * POLE_PAIRS;
   for (int axis = 0; axis < AXIS_COUNT; ++axis) {
     AxisState &state = axis_state[axis];
-    const float final_field = state.home_field + state.direction *
-        target_deg * DEG_TO_RAD_F * POLE_PAIRS;
-    state.home_field = final_field -
-        state.direction * state.geometric_position * POLE_PAIRS;
+    float sum_sin = 0, sum_cos = 0;
+    float low_position = 0, high_position = 0;
+    float from = target_deg;
+    const float endpoints[] = {target_deg - 2.0f, target_deg + 2.0f,
+                               target_deg - 2.0f, target_deg};
+    for (int pass = 0; pass < 4; ++pass) {
+      const float to = endpoints[pass];
+      const uint32_t duration = uint32_t(fabsf(to - from) / 3.0f * 1000);
+      const uint32_t started = millis();
+      while (true) {
+        if (abort_requested()) return false;
+        const float fraction = constrain(float(millis() - started) / duration, 0.0f, 1.0f);
+        const float command_deg = from + (to - from) * fraction;
+        const float field = state.home_field + state.direction * command_deg * DEG_TO_RAD_F * POLE_PAIRS;
+        set_field(axis, field, DRIVE_AMPLITUDE[axis]);
+        for (int j = 0; j < AXIS_COUNT; ++j) {
+          float position;
+          if (!sample_axis(j, position)) return false;
+          if (fabsf(position - axis_state[j].position) > 0.75f * DEG_TO_RAD_F) {
+            latch_fault("encoder jump during bidirectional phase reference");
+            return false;
+          }
+          axis_state[j].position = position;
+          axis_state[j].previous_position = position;
+        }
+        if ((pass == 1 || pass == 2) && fraction > .15f && fraction < .85f) {
+          const float residual = (command_deg * DEG_TO_RAD_F - state.position) * POLE_PAIRS;
+          sum_sin += sinf(residual);
+          sum_cos += cosf(residual);
+        }
+        if (fraction >= 1) break;
+        delay(1);
+      }
+      if (pass == 1) high_position = state.position;
+      if (pass == 2) low_position = state.position;
+      from = to;
+    }
+    if (high_position - low_position < 0.5f * DEG_TO_RAD_F) {
+      latch_fault("phase reference sweep did not move joint");
+      return false;
+    }
+    const float offset = atan2f(sum_sin, sum_cos);
+    state.home_field += state.direction * offset;
+    serialf("I)Axis %d bidirectional phase correction %.3f rad, span %.3f deg\n",
+            axis, offset, (high_position - low_position) * RAD_TO_DEG_F);
+  }
+  // Hand off the actual applied field as torque state, without baking the
+  // one-way endpoint's friction into the newly measured neutral reference.
+  for (int axis = 0; axis < AXIS_COUNT; ++axis) {
+    AxisState &state = axis_state[axis];
+    const float initial_phase = state.direction * (applied_field[axis] - state.home_field) -
+                                state.position * POLE_PAIRS;
     state.target = target_deg * DEG_TO_RAD_F;
     state.previous_position = state.position;
     state.velocity = 0.0f;
     state.integral_error = 0.0f;
     state.phase_lead = 0.0f;
+    state.servo.reset(initial_phase);
   }
   last_servo_us = micros();
 
@@ -1494,8 +1622,15 @@ void execute_command(char *line) {
     Serial.println("ok");
     return;
   }
+  if (command_is(line, "M0")) {
+    // Cancel travel while retaining the current interpolated holding target.
+    move.active = false;
+    move.end = current_pose;
+    Serial.println("ok");
+    return;
+  }
   if (command_is(line, "M58")) {
-    Serial.println("v1.1.7-stm32-f401");
+    Serial.println(FIRMWARE_VERSION);
     Serial.println("ok");
     return;
   }
@@ -1528,8 +1663,18 @@ void execute_command(char *line) {
     return;
   }
   if (command_is(line, "M50")) {
-    serialf("X%.6f Y%.6f Z%.6f\n", current_pose.translation.x,
-            current_pose.translation.y, current_pose.translation.z);
+    Pose6DF measured = current_pose;
+    if (all_homed() && drivers_enabled) {
+      float joints[AXIS_COUNT];
+      for (int axis = 0; axis < AXIS_COUNT; ++axis)
+        joints[axis] = axis_state[axis].position;
+      kinematics.foreward(joints, measured);
+    }
+    serialf("X%.6f Y%.6f Z%.6f\n", measured.translation.x,
+            measured.translation.y, measured.translation.z);
+    const Pose6DF &destination = move.active ? move.end : current_pose;
+    serialf("Destination: X%.6f Y%.6f Z%.6f\n", destination.translation.x,
+            destination.translation.y, destination.translation.z);
     Serial.println("ok");
     return;
   }
@@ -1562,7 +1707,8 @@ void execute_command(char *line) {
     for (int axis = 0; axis < AXIS_COUNT; ++axis) {
       serialf("Joint %d: is_homed=%d, is_calibrated=1, angle=%.4f deg, "
               "target=%.4f deg, error=%.4f deg, phase=%.3f rad, drive=%.2f, limit=%.3f deg, "
-              "raw_delta=%ld, direction=%.0f, enc_status=%u\n",
+              "raw_delta=%ld, direction=%.0f, enc_status=%u, "
+              "crc_retries=%lu, crc_failures=%lu\n",
               axis, axis_state[axis].homed,
               axis_state[axis].position * RAD_TO_DEG_F,
               axis_state[axis].target * RAD_TO_DEG_F,
@@ -1571,7 +1717,19 @@ void execute_command(char *line) {
               DRIVE_AMPLITUDE[axis],
               calibration.axis[axis].max_deg,
               long(axis_state[axis].last_raw - axis_state[axis].home_raw),
-              axis_state[axis].direction, encoder[axis].status());
+              axis_state[axis].direction, encoder[axis].status(),
+              static_cast<unsigned long>(encoder[axis].crc_retries()),
+              static_cast<unsigned long>(encoder[axis].crc_failures()));
+      serialf("  motion_diag: last_jump=%+.4f deg, peak_jump=%.4f deg, "
+              "peak_error=%.4f deg, peak_velocity=%.3f deg/s, "
+              "peak_phase=%.3f rad, saturated=%lu/%lu ticks\n",
+              axis_state[axis].last_sample_jump,
+              axis_state[axis].peak_sample_jump,
+              axis_state[axis].peak_abs_error * RAD_TO_DEG_F,
+              axis_state[axis].peak_abs_velocity * RAD_TO_DEG_F,
+              axis_state[axis].peak_abs_phase,
+              static_cast<unsigned long>(axis_state[axis].saturated_ticks),
+              static_cast<unsigned long>(axis_state[axis].diagnostic_ticks));
     }
     serialf("Tool[0] output: %.3f\nTool[1] output: %.3f\n", tool_value[0],
             tool_value[1]);
@@ -1639,6 +1797,7 @@ void execute_command(char *line) {
     if (!kinematics.inverse(requested, targets) || !targets_within_limits(targets, true))
       return;
     for (int axis = 0; axis < AXIS_COUNT; ++axis) axis_state[axis].target = targets[axis];
+    move.active = false;
     current_pose = requested;
     Serial.println("ok");
     return;
@@ -1648,28 +1807,39 @@ void execute_command(char *line) {
       Serial.println("error: home and enable the motors first");
       return;
     }
-    if (move.active) {
-      Serial.println("busy");
-      return;
-    }
-    Pose6DF requested = current_pose;
+    // Unspecified axes retain the destination; replan from the current
+    // interpolated setpoint so replacing a target never jumps position.
+    Pose6DF requested = move.active ? move.end : current_pose;
     parse_word(line, 'X', requested.translation.x);
     parse_word(line, 'Y', requested.translation.y);
     parse_word(line, 'Z', requested.translation.z);
     float feed = default_feed_mm_s;
-    if (parse_word(line, 'F', feed)) default_feed_mm_s = constrain(feed, 0.01f, 20.0f);
+    parse_word(line, 'F', feed);
+    if (!isfinite(feed) || feed <= 0.0f || feed > 2.0f ||
+        !isfinite(requested.translation.x) ||
+        !isfinite(requested.translation.y) ||
+        !isfinite(requested.translation.z)) {
+      Serial.println("error: finite coordinates and feed 0 < F <= 2 mm/s required");
+      return;
+    }
     if (!cartesian_path_is_safe(current_pose, requested)) {
       Serial.println("error: requested path leaves calibrated joint workspace");
       return;
     }
     const Vec3F delta = requested.translation - current_pose.translation;
     const float distance = delta.length();
+    default_feed_mm_s = feed;
     move.start = current_pose;
     move.end = requested;
     move.start_ms = millis();
-    move.duration_ms = max(uint32_t(100),
-                           uint32_t(distance / default_feed_mm_s * 1000.0f));
+    // Cubic smoothstep peaks at 1.5*distance/time and 6*distance/time^2.
+    // Bound acceleration to 5 mm/s^2, including short jogs and retargets.
+    const float speed_time = max(1.5f * distance / default_feed_mm_s,
+                                 1.5f * fabsf(delta.y) / 1.0f);
+    move.duration_ms = max(uint32_t(100), uint32_t(ceilf(1000.0f * max(
+        speed_time, sqrtf(6.0f * distance / 5.0f)))));
     move.active = distance > 1e-6f;
+    reset_motion_diagnostics();
     if (!move.active) current_pose = requested;
     Serial.println("ok");
     return;
@@ -1697,7 +1867,7 @@ void setup() {
   const uint32_t wait_start = millis();
   while (!Serial && millis() - wait_start < 2000) {}
   Serial.println();
-  Serial.println("I)Open Micro Stage STM32F401 controller v1.1.7");
+  serialf("I)Open Micro Stage STM32F401 controller %s\n", FIRMWARE_VERSION);
   Serial.println(calibration_loaded_from_flash
                      ? "I)Calibration loaded from internal flash"
                      : "I)Using embedded fallback calibration");

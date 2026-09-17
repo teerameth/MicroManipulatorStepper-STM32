@@ -22,6 +22,34 @@ Select the `F401RE_25MHZ_USB_CDC` serial device and click **Connect**. After a r
 power cycle, click **Home all (G28)** before moving. All axes home together because the
 mechanism is mechanically coupled.
 
+Firmware v1.3.2 adds a bidirectional phase-reference measurement near the centre
+after the retract: each joint sweeps about +/-2 degrees before holding. This adds
+about 12 seconds to homing and does not overwrite the saved calibration. Normal
+holding and travel use a position/velocity PI cascade with bounded recovery speed.
+
+With firmware v1.2.0, **Set destination** replaces an active move immediately.
+Jog clicks accumulate against the requested destination, so repeated clicks work
+while the stage is travelling. Rapid clicks are combined into the latest target.
+The live pose is measured from the encoders while enabled; the destination is
+displayed separately. The board with USB serial `20883074534E` is preferred when
+choosing the port on Windows as well as Linux.
+
+The default speed is 1 mm/s; presets range from 0.05 to 2 mm/s. Feed specifies
+peak Cartesian speed; the Y velocity component is limited to 1 mm/s because
+the loaded joint approached its safety threshold in the 2 mm/s reversal test.
+X and Z can use 2 mm/s. Each move uses
+cubic ramps limited to 5 mm/s² within each segment. Retargeting
+starts a new ramp at the current commanded position (position is continuous,
+but velocity is restarted). Small jogs are acceleration-limited. Step presets
+range from 0.001 to 1 mm; a step setting does not certify mechanical accuracy.
+
+**Stop & hold**, or Escape, cancels pending GUI moves and sends `M0`, retaining
+motor holding torque. Emergency disable releases the motors with `M18`. During
+homing or calibration Escape invokes the abort instead. Enable **Keyboard jog**
+for XY arrow keys and Z Page Up/Page Down; keys do not jog while editing text.
+**Mark this position** and **Return to mark** provide a session bookmark, cleared
+on disconnect, homing, or calibration.
+
 The red **EMERGENCY DISABLE** button aborts an active homing operation or sends `M18`
 when the controller is idle. Closing or disconnecting the GUI does not disable a motor
 that is already holding; click **Disable motors (M18)** first if that is desired.

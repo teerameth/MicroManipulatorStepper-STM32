@@ -82,7 +82,7 @@ def main():
         oms.home()
 
         # move and wait
-        oms.move_to(0, 0, 0, f=10)
+        oms.move_to(0, 0, 0, f=1)
         oms.wait_for_stop()
 
         # print some info
